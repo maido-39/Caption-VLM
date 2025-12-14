@@ -159,6 +159,12 @@ def load_local(model_name: Optional[str] = None) -> Callable[[Optional[List[Imag
     try:
         from transformers import AutoProcessor, AutoModelForVision2Seq
         import torch
+        # qwen-vl-utils가 있으면 사용, 없으면 직접 처리
+        try:
+            from qwen_vl_utils import process_vision_info
+            USE_QWEN_VL_UTILS = True
+        except ImportError:
+            USE_QWEN_VL_UTILS = False
     except ImportError:
         raise ImportError("transformers와 torch 패키지가 설치되지 않았습니다. pip install transformers torch를 실행하세요.")
     
@@ -214,14 +220,24 @@ def load_local(model_name: Optional[str] = None) -> Callable[[Optional[List[Imag
         
         # 이미지 처리
         if images and len(images) > 0:
-            image_inputs, video_inputs = processor.process_vision_info(messages)
-            inputs = processor(
-                text=[text],
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                return_tensors="pt"
-            )
+            if USE_QWEN_VL_UTILS:
+                # qwen-vl-utils 사용
+                image_inputs, video_inputs = process_vision_info(messages)
+                inputs = processor(
+                    text=[text],
+                    images=image_inputs,
+                    videos=video_inputs,
+                    padding=True,
+                    return_tensors="pt"
+                )
+            else:
+                # 최신 transformers API: processor에 messages 직접 전달
+                inputs = processor(
+                    text=[text],
+                    images=images,
+                    padding=True,
+                    return_tensors="pt"
+                )
         else:
             inputs = processor(
                 text=[text],
