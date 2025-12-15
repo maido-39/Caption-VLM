@@ -77,12 +77,14 @@ class VLMManager:
             handler_kwargs['api_key'] = kwargs.get('api_key')
         elif vlm_name == "gemini":
             handler_kwargs['api_key'] = kwargs.get('api_key')
+            handler_kwargs['model_name'] = kwargs.get('model_name')  # Gemini 모델 이름 지원
         elif vlm_name == "local":
             handler_kwargs['model_name'] = kwargs.get('model_name')
         
         handler = self._get_handler(vlm_name, **handler_kwargs)
         
         # VLM 호출 (초기화 옵션 제외한 나머지 kwargs만 전달)
+        # Gemini의 경우 model_name은 초기화 옵션이므로 generate_kwargs에서 제외
         generate_kwargs = {k: v for k, v in kwargs.items() 
                           if k not in ['api_key', 'model_name']}
         
@@ -112,7 +114,7 @@ class VLMManager:
         if vlm_name == "openai":
             handler = OpenAIHandler(api_key=kwargs.get('api_key'))
         elif vlm_name == "gemini":
-            handler = GeminiHandler(api_key=kwargs.get('api_key'))
+            handler = GeminiHandler(api_key=kwargs.get('api_key'), model_name=kwargs.get('model_name'))
         elif vlm_name == "local":
             handler = LocalHandler(model_name=kwargs.get('model_name'))
         else:
@@ -140,7 +142,8 @@ class VLMManager:
         if vlm_name == "openai":
             return f"openai_{kwargs.get('api_key', 'default')}"
         elif vlm_name == "gemini":
-            return f"gemini_{kwargs.get('api_key', 'default')}"
+            model_name = kwargs.get('model_name', 'default')
+            return f"gemini_{kwargs.get('api_key', 'default')}_{model_name}"
         elif vlm_name == "local":
             return f"local_{kwargs.get('model_name', 'default')}"
         else:
