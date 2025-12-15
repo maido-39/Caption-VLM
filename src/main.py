@@ -11,7 +11,7 @@ import gradio as gr
 from typing import List, Optional, Tuple
 from PIL import Image
 
-from src.vlm_utils import generate_caption
+from src.vlm import VLMManager
 from src.config.settings import Settings
 from src.utils.session_manager import SessionManager
 
@@ -57,38 +57,41 @@ def create_caption(
             from src.utils.image_utils import convert_to_pil_image
             processed_images = [convert_to_pil_image(img) for img in images]
         
-        # 프롬프트 딕셔너리 구성 (VLMManager 사용 시 더 구조화된 방식)
-        # 하위 호환성을 위해 기존 방식도 유지
-        prompt_parts = []
+        # VLMManager 직접 사용
+        manager = VLMManager()
+        
+        # 구조화된 프롬프트 딕셔너리 구성
+        prompt_dict = {}
         if system_prompt.strip():
-            prompt_parts.append(system_prompt.strip())
+            prompt_dict["system_prompt"] = system_prompt.strip()
         if context.strip():
-            prompt_parts.append(context.strip())
+            prompt_dict["context"] = context.strip()
+        
+        # user_prompt 설정 (필수)
         if iteration_context.strip():
-            prompt_parts.append(iteration_context.strip())
-        
-        if prompt_parts:
-            prompt = "\n\n".join(prompt_parts)
+            prompt_dict["user_prompt"] = iteration_context.strip()
+        elif context.strip():
+            # iteration_context가 없으면 context를 user_prompt로 사용
+            prompt_dict["user_prompt"] = context.strip()
         else:
-            prompt = "이 이미지에 대해 자세히 설명해주세요."
+            # 둘 다 없으면 기본값
+            prompt_dict["user_prompt"] = "이 이미지에 대해 자세히 설명해주세요."
         
-        # API 키 설정 (UI에서 입력된 경우)
-        api_key = None
+        # API 키 및 모델 설정
+        kwargs = {}
         if vlm_type == "openai":
-            api_key = openai_key or Settings.get_openai_key()
+            kwargs["api_key"] = openai_key or Settings.get_openai_key()
         elif vlm_type == "gemini":
-            api_key = gemini_key or Settings.get_gemini_key()
+            kwargs["api_key"] = gemini_key or Settings.get_gemini_key()
+        elif vlm_type == "local":
+            kwargs["model_name"] = local_model or Settings.get_local_model()
         
-        # 모델 이름 설정
-        model_name = local_model or Settings.get_local_model()
-        
-        # 캡션 생성 (기존 generate_caption 함수 사용 - 하위 호환성 유지)
-        caption = generate_caption(
-            vlm_type=vlm_type,
+        # VLMManager를 사용하여 캡션 생성
+        caption = manager.call_vlm(
+            vlm_name=vlm_type,
             images=processed_images,
-            prompt=prompt,
-            api_key=api_key,
-            model_name=model_name if vlm_type == "local" else None
+            prompt=prompt_dict,
+            **kwargs
         )
         
         # 클립보드에 캡션 복사

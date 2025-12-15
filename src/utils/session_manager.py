@@ -7,7 +7,7 @@ from typing import Optional, List
 from PIL import Image
 import shutil
 
-from src.vlm_utils import generate_caption
+from src.vlm import VLMManager
 
 
 class SessionManager:
@@ -116,6 +116,9 @@ class SessionManager:
 폴더 이름만 출력하세요 (설명 없이):"""
         
         try:
+            # VLMManager 사용
+            manager = VLMManager()
+            
             # 선택된 VLM 사용
             if vlm_type == "openai":
                 from src.config.settings import Settings
@@ -123,24 +126,24 @@ class SessionManager:
                 if not key:
                     # API 키가 없으면 기본 이름 사용
                     return "session"
-                from openai import OpenAI
-                client = OpenAI(api_key=key)
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",  # 폴더 이름 생성에는 경량 모델 사용
-                    messages=[{"role": "user", "content": prompt}],
+                folder_name = manager.call_vlm(
+                    vlm_name="openai",
+                    images=None,
+                    prompt=prompt,
+                    api_key=key,
                     max_tokens=50
-                )
-                folder_name = response.choices[0].message.content.strip()
+                ).strip()
             elif vlm_type == "gemini":
                 from src.config.settings import Settings
                 key = gemini_key or Settings.get_gemini_key()
                 if not key:
                     return "session"
-                import google.generativeai as genai
-                genai.configure(api_key=key)
-                model = genai.GenerativeModel('gemini-2.0-flash-exp')
-                response = model.generate_content(prompt)
-                folder_name = response.text.strip()
+                folder_name = manager.call_vlm(
+                    vlm_name="gemini",
+                    images=None,
+                    prompt=prompt,
+                    api_key=key
+                ).strip()
             else:
                 # Local 모델은 폴더 이름 생성에 사용하지 않음 (너무 느림)
                 folder_name = "session"

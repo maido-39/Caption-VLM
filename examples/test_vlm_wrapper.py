@@ -20,7 +20,6 @@ def test_basic_usage():
     """기본 사용법 테스트"""
     print("\n=== 기본 사용법 테스트 ===")
     
-    manager = VLMManager()
     
     # 단순 텍스트 프롬프트 (이미지 없음)
     try:
