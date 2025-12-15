@@ -95,9 +95,12 @@ class OpenAIHandler(BaseHandler):
                 "content": formatted_prompt
             })
         
-        # GPT-4 Vision 모델 사용
+        # 모델 설정: kwargs > Settings > 기본값
+        from src.config.settings import Settings
+        model_name = kwargs.get('model') or Settings.get_openai_model() or "gpt-4o"
+
         response = self.client.chat.completions.create(
-            model=kwargs.get('model', 'gpt-4o'),
+            model=model_name,
             messages=messages,
             max_tokens=max_tokens
         )

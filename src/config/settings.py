@@ -13,6 +13,7 @@ class Settings:
     
     # API 키
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     
     # 로컬 VLM 모델 설정
@@ -22,6 +23,11 @@ class Settings:
     def get_openai_key(cls) -> Optional[str]:
         """OpenAI API 키 반환"""
         return cls.OPENAI_API_KEY
+    
+    @classmethod
+    def get_openai_model(cls) -> str:
+        """OpenAI 모델 이름 반환"""
+        return cls.OPENAI_MODEL
     
     @classmethod
     def get_gemini_key(cls) -> Optional[str]:
@@ -37,6 +43,11 @@ class Settings:
     def set_openai_key(cls, api_key: str) -> None:
         """OpenAI API 키 설정"""
         cls.OPENAI_API_KEY = api_key
+    
+    @classmethod
+    def set_openai_model(cls, model: str) -> None:
+        """OpenAI 모델 이름 설정"""
+        cls.OPENAI_MODEL = model
     
     @classmethod
     def set_gemini_key(cls, api_key: str) -> None:
