@@ -57,7 +57,8 @@ def create_caption(
             from src.utils.image_utils import convert_to_pil_image
             processed_images = [convert_to_pil_image(img) for img in images]
         
-        # 프롬프트 결합: 시스템 프롬프트 + context + iteration_context
+        # 프롬프트 딕셔너리 구성 (VLMManager 사용 시 더 구조화된 방식)
+        # 하위 호환성을 위해 기존 방식도 유지
         prompt_parts = []
         if system_prompt.strip():
             prompt_parts.append(system_prompt.strip())
@@ -81,7 +82,7 @@ def create_caption(
         # 모델 이름 설정
         model_name = local_model or Settings.get_local_model()
         
-        # 캡션 생성
+        # 캡션 생성 (기존 generate_caption 함수 사용 - 하위 호환성 유지)
         caption = generate_caption(
             vlm_type=vlm_type,
             images=processed_images,
