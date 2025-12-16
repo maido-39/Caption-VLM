@@ -88,7 +88,18 @@ class VLMManager:
         generate_kwargs = {k: v for k, v in kwargs.items() 
                           if k not in ['api_key', 'model_name']}
         
-        return handler.generate(images, prompt, **generate_kwargs)
+        result = handler.generate(images, prompt, **generate_kwargs)
+        
+        # OpenAI 핸들러의 경우 토큰 사용량 정보도 함께 반환
+        # (다른 핸들러는 None 반환)
+        usage_info = None
+        if vlm_name == "openai" and hasattr(handler, 'get_last_usage'):
+            usage_info = handler.get_last_usage()
+        
+        # 토큰 사용량 정보가 있으면 튜플로 반환, 없으면 문자열만 반환
+        if usage_info:
+            return (result, usage_info)
+        return result
     
     def _get_handler(self, vlm_name: str, **kwargs) -> Union[OpenAIHandler, GeminiHandler, LocalHandler]:
         """

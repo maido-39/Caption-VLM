@@ -367,6 +367,90 @@ class OpenAIHandler(BaseHandler):
             
             # 빈 문자열이라도 반환 (호출자는 빈 문자열을 처리할 수 있어야 함)
         
+        # 토큰 사용량 정보 추출
+        usage_info = None
+        if hasattr(response, 'usage') and response.usage:
+            usage = response.usage
+            usage_info = {
+                "prompt_tokens": getattr(usage, 'prompt_tokens', 0),
+                "completion_tokens": getattr(usage, 'completion_tokens', 0),
+                "total_tokens": getattr(usage, 'total_tokens', 0),
+            }
+            # Reasoning 모델의 경우 추가 정보
+            if hasattr(usage, 'completion_tokens_details'):
+                details = usage.completion_tokens_details
+                if details:
+                    # reasoning_tokens 추출 (여러 방법 시도)
+                    reasoning_tokens = 0
+                    try:
+                        # 방법 1: 속성으로 직접 접근
+                        if hasattr(details, 'reasoning_tokens'):
+                            reasoning_tokens = getattr(details, 'reasoning_tokens', 0)
+                        # 방법 2: dict처럼 접근
+                        elif isinstance(details, dict):
+                            reasoning_tokens = details.get('reasoning_tokens', 0)
+                        # 방법 3: __dict__에서 찾기
+                        elif hasattr(details, '__dict__'):
+                            reasoning_tokens = details.__dict__.get('reasoning_tokens', 0)
+                    except Exception as e:
+                        import os
+                        debug_mode = os.getenv("OPENAI_DEBUG", "false").lower() == "true"
+                        if debug_mode:
+                            print(f"[DEBUG] reasoning_tokens 추출 중 에러: {e}")
+                    
+                    # accepted_prediction_tokens 추출
+                    accepted_prediction_tokens = 0
+                    try:
+                        if hasattr(details, 'accepted_prediction_tokens'):
+                            accepted_prediction_tokens = getattr(details, 'accepted_prediction_tokens', 0)
+                        elif isinstance(details, dict):
+                            accepted_prediction_tokens = details.get('accepted_prediction_tokens', 0)
+                        elif hasattr(details, '__dict__'):
+                            accepted_prediction_tokens = details.__dict__.get('accepted_prediction_tokens', 0)
+                    except Exception as e:
+                        import os
+                        debug_mode = os.getenv("OPENAI_DEBUG", "false").lower() == "true"
+                        if debug_mode:
+                            print(f"[DEBUG] accepted_prediction_tokens 추출 중 에러: {e}")
+                    
+                    # reasoning_tokens 기록
+                    # reasoning 모델인 경우 항상 기록 (0이어도), 일반 모델은 0보다 클 때만
+                    if is_reasoning_model:
+                        # Reasoning 모델: 항상 기록 (0이어도 정보로 유용)
+                        usage_info["reasoning_tokens"] = reasoning_tokens
+                        if accepted_prediction_tokens > 0:
+                            usage_info["accepted_prediction_tokens"] = accepted_prediction_tokens
+                    elif reasoning_tokens > 0:
+                        # 일반 모델: 0보다 클 때만 기록 (일반적으로는 0이어야 함)
+                        usage_info["reasoning_tokens"] = reasoning_tokens
+                        if accepted_prediction_tokens > 0:
+                            usage_info["accepted_prediction_tokens"] = accepted_prediction_tokens
+                    
+                    # 디버깅: reasoning 모델인데 reasoning_tokens가 0인 경우 로깅
+                    import os
+                    debug_mode = os.getenv("OPENAI_DEBUG", "false").lower() == "true"
+                    if debug_mode and is_reasoning_model:
+                        print(f"[DEBUG] Reasoning 모델 토큰 정보:")
+                        print(f"[DEBUG]   - reasoning_tokens: {reasoning_tokens}")
+                        print(f"[DEBUG]   - accepted_prediction_tokens: {accepted_prediction_tokens}")
+                        print(f"[DEBUG]   - completion_tokens: {usage_info['completion_tokens']}")
+                        print(f"[DEBUG]   - details 타입: {type(details)}")
+                        if hasattr(details, '__dict__'):
+                            print(f"[DEBUG]   - details.__dict__: {details.__dict__}")
+                        print(f"[DEBUG]   - details 속성: {[attr for attr in dir(details) if not attr.startswith('_')]}")
+        
+        # 마지막 사용량 정보를 인스턴스에 저장 (나중에 가져올 수 있도록)
+        self._last_usage = usage_info
+        
         return content_stripped
+    
+    def get_last_usage(self) -> Optional[Dict]:
+        """
+        마지막 API 호출의 토큰 사용량 정보 반환
+        
+        Returns:
+            토큰 사용량 딕셔너리 또는 None
+        """
+        return getattr(self, '_last_usage', None)
 
 

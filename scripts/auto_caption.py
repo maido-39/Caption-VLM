@@ -201,6 +201,7 @@ def update_json_caption(
     context: str,
     execution_time: float,
     error: Optional[str] = None,
+    token_usage: Optional[Dict] = None,
 ) -> None:
     """JSON 파일에 캡션 하나 추가"""
     with output_path.open("r", encoding="utf-8") as f:
@@ -214,8 +215,29 @@ def update_json_caption(
     if error:
         caption_entry["error"] = error
     
+    # 토큰 사용량 정보 추가
+    if token_usage:
+        caption_entry["token_usage"] = token_usage
+    
     data["captions"].append(caption_entry)
     data["api"]["execution_times"].append(execution_time)
+    
+    # 전체 토큰 사용량 누적
+    if token_usage:
+        if "total_token_usage" not in data["api"]:
+            data["api"]["total_token_usage"] = {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
+        data["api"]["total_token_usage"]["prompt_tokens"] += token_usage.get("prompt_tokens", 0)
+        data["api"]["total_token_usage"]["completion_tokens"] += token_usage.get("completion_tokens", 0)
+        data["api"]["total_token_usage"]["total_tokens"] += token_usage.get("total_tokens", 0)
+        # Reasoning 토큰이 있으면 추가
+        if "reasoning_tokens" in token_usage:
+            if "reasoning_tokens" not in data["api"]["total_token_usage"]:
+                data["api"]["total_token_usage"]["reasoning_tokens"] = 0
+            data["api"]["total_token_usage"]["reasoning_tokens"] += token_usage.get("reasoning_tokens", 0)
     
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -257,6 +279,7 @@ def process(
         execution_time = 0.0
         caption = None
         error = None
+        token_usage = None
         start_time = time.time()
 
         try:
@@ -269,12 +292,20 @@ def process(
             vlm_kwargs = get_vlm_kwargs(vlm, temperature)
             
             # VLM 호출
-            caption = manager.call_vlm(
+            vlm_result = manager.call_vlm(
                 vlm_name=vlm,
                 images=[pil_img],
                 prompt=prompt,
                 **vlm_kwargs,
             )
+            
+            # 결과가 튜플인 경우 (토큰 사용량 정보 포함)
+            if isinstance(vlm_result, tuple):
+                caption, token_usage = vlm_result
+            else:
+                caption = vlm_result
+                token_usage = None
+            
             execution_time = time.time() - start_time
 
             # 빈 문자열 체크 및 경고
@@ -313,6 +344,7 @@ def process(
             context=current_context,
             execution_time=execution_time,
             error=error,
+            token_usage=token_usage,
         )
 
 

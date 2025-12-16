@@ -107,8 +107,22 @@ API 키를 환경 변수로 설정하면 UI에서 매번 입력할 필요가 없
    # OpenAI API Key (OpenAI VLM 사용 시 필요)
    OPENAI_API_KEY=sk-your-openai-api-key-here
    
+   # OpenAI 모델 설정
+   OPENAI_MODEL=gpt-4o
+   OPENAI_TEMPERATURE=1.0
+   
+   # OpenAI 토큰 제한 설정
+   # Reasoning 모델(gpt-5, o1, o3)용: max_completion_tokens
+   # 기본값: 1000 (reasoning 최대 500 + 응답 최대 500)
+   OPENAI_MAX_COMPLETION_TOKENS=1000
+   
+   # 일반 모델(gpt-4o, gpt-4 등)용: max_tokens
+   # 기본값: 500
+   OPENAI_MAX_TOKENS=500
+   
    # Gemini API Key (Gemini VLM 사용 시 필요)
    GEMINI_API_KEY=your-gemini-api-key-here
+   GEMINI_MODEL=gemini-2.0-flash-exp
    
    # 로컬 VLM 모델 이름 (로컬 VLM 사용 시)
    # 선택지 예시:
@@ -230,12 +244,155 @@ caption-vlm/
 - VRAM 요구사항은 대략적인 값이며, 실제 사용량은 다를 수 있습니다
 - 모델 이름은 Hugging Face Hub의 정확한 모델 ID를 사용해야 합니다
 
+## CLI 스크립트: 자동 캡션 생성
+
+프로젝트에는 배치로 이미지에 캡션을 생성하는 CLI 스크립트가 포함되어 있습니다.
+
+### 사용법
+
+```bash
+# 기본 사용법
+python scripts/auto_caption.py sample_data/ep_0000_00508-4vwGX7U38Ux_wardrobe
+
+# 출력 파일 지정
+python scripts/auto_caption.py sample_data/ep_0000_00508-4vwGX7U38Ux_wardrobe --output custom_captions.json
+
+# VLM 선택 (openai, gemini, local)
+python scripts/auto_caption.py sample_data/ep_0000_00508-4vwGX7U38Ux_wardrobe --vlm openai
+
+# Temperature 설정
+python scripts/auto_caption.py sample_data/ep_0000_00508-4vwGX7U38Ux_wardrobe --temperature 0.1
+
+# 상세 로그 출력
+python scripts/auto_caption.py sample_data/ep_0000_00508-4vwGX7U38Ux_wardrobe --verbose
+```
+
+### 기능
+
+- **이미지 선택**: 4프레임 간격으로 이미지 선택 (0, 4, 8, ...), 마지막 이미지는 항상 포함
+- **기본 프롬프트**: 프로젝트 루트의 `default_prompt.txt` 사용
+- **Instruction**: `episode_info.json`의 `object_goal`에서 자동 추출 → `Find and move toward "<object_goal>"`
+- **Context 관리**: 직전 캡션을 다음 호출의 context로 전달 (누적 없음)
+- **JSON 출력**: 각 이미지별 캡션, 토큰 사용량, 실행 시간 등 구조화된 정보 저장
+
+### 출력 JSON 구조
+
+```json
+{
+  "api": {
+    "vlm": "openai",
+    "model": "gpt-4o",
+    "temperature": 1.0,
+    "execution_times": [1.23, 1.45, ...],
+    "total_execution_time": 10.5,
+    "start_timestamp": "2025-12-15_21-33-36",
+    "end_timestamp": "2025-12-15_21-33-46",
+    "total_token_usage": {
+      "prompt_tokens": 1500,
+      "completion_tokens": 2000,
+      "total_tokens": 3500,
+      "reasoning_tokens": 500
+    }
+  },
+  "dataset": {
+    "target_path": "/path/to/episode_dir"
+  },
+  "captions": [
+    {
+      "step": "0000",
+      "caption": "1. **Scene Description**: ...",
+      "context": "",
+      "token_usage": {
+        "prompt_tokens": 500,
+        "completion_tokens": 400,
+        "total_tokens": 900,
+        "reasoning_tokens": 200
+      }
+    }
+  ]
+}
+```
+
+### CaptionJsonParser 클래스
+
+JSON 파일을 파싱하는 유틸리티 클래스가 포함되어 있습니다:
+
+```python
+from scripts.auto_caption import CaptionJsonParser
+
+parser = CaptionJsonParser("captions.json")
+
+# 각 섹션별 리스트 반환
+descriptions = parser.get_description()
+plannings = parser.get_planning()
+summaries = parser.get_historical_summarization()
+instructions = parser.get_immediate_action_instruction()
+
+# Step 정보
+steps_info = parser.get_steps()  # {"total_step": 10, "steps": ["0000", "0004", ...]}
+
+# Step-Caption 딕셔너리
+caption_dict = parser.get_caption()  # {"0000": "caption text", ...}
+```
+
+## OpenAI 모델별 설정
+
+### 모델별 파라미터 지원
+
+프로젝트는 모델별로 자동으로 적절한 파라미터를 설정합니다:
+
+| 모델 시리즈 | Reasoning 지원 | 토큰 파라미터 | Temperature 지원 |
+|------------|---------------|--------------|-----------------|
+| gpt-4o | ❌ | max_completion_tokens | ✅ |
+| gpt-4 | ❌ | max_tokens | ✅ |
+| gpt-3.5 | ❌ | max_tokens | ✅ |
+| gpt-5 | ✅ | max_completion_tokens | ❌ |
+| o1 | ✅ | max_completion_tokens | ❌ |
+| o3 | ✅ | max_completion_tokens | ❌ |
+
+### Reasoning 모델 주의사항
+
+Reasoning 모델(gpt-5, o1, o3)은 reasoning 토큰과 실제 응답 토큰을 모두 포함하므로 더 큰 토큰 제한이 필요합니다:
+- Reasoning 토큰: 최대 500 토큰
+- 실제 응답 토큰: 설정한 값만큼
+- 총 필요 토큰: reasoning + 응답
+
+예를 들어, 응답을 400 토큰으로 제한하려면 `OPENAI_MAX_COMPLETION_TOKENS=900` (500 + 400)으로 설정해야 합니다.
+
+### 모델별 비용 참고표
+
+```
++------------------+------------------+------------------+------------------+
+|      모델명      |  Reasoning 지원  |   상대적 비용    |   토큰 파라미터  |
++------------------+------------------+------------------+------------------+
+| gpt-4            |        ❌        |      중간        |    max_tokens    |
+| gpt-4-turbo      |        ❌        |      중간        |    max_tokens    |
+| gpt-4o           |        ❌        |      낮음        | max_completion_  |
+|                  |                  |                  |     tokens       |
+| gpt-4o-mini      |        ❌        |      매우 낮음   | max_completion_  |
+|                  |                  |                  |     tokens       |
+| gpt-5            |        ✅        |      높음       | max_completion_  |
+| gpt-5.1          |        ✅        |      높음       | max_completion_  |
+| gpt-5-mini       |        ✅        |      중간       | max_completion_  |
+|                  |                  |                  |     tokens       |
+| o1               |        ✅        |      높음       | max_completion_  |
+| o1-preview       |        ✅        |      높음       | max_completion_  |
+| o1-mini          |        ✅        |      중간       | max_completion_  |
+|                  |                  |                  |     tokens       |
+| o3               |        ✅        |      높음       | max_completion_  |
+| o3-mini          |        ✅        |      중간       | max_completion_  |
+|                  |                  |                  |     tokens       |
++------------------+------------------+------------------+------------------+
+```
+
 ## 주의사항
 
 - API 키는 `.env` 파일에 저장하거나 UI에서 입력할 수 있습니다
 - 로컬 VLM을 사용하려면 충분한 GPU 메모리가 필요할 수 있습니다
 - 이미지는 최대 5개까지 입력 가능합니다
 - 이미지가 없어도 프롬프트만으로 텍스트 생성이 가능합니다
+- Reasoning 모델 사용 시 토큰 제한을 충분히 설정해야 합니다 (기본값: 1000)
+- 토큰 사용량은 JSON 파일에 자동으로 기록됩니다
 
 ## 라이선스
 
